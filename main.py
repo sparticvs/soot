@@ -1,3 +1,8 @@
+"""
+Copyright (c) 2022 - Charles `sparticvs` Timko
+
+GPL v2.0 - See LICENSE file for details
+"""
 import subprocess
 import argparse
 import configparser
@@ -5,7 +10,7 @@ from github import Github
 from pyrpm.spec import Spec
 from pygit2 import (
         clone_repository, discover_repository, Repository, Keypair,
-        RemoteCallbacks)
+        RemoteCallbacks, Signature)
 
 parser = argparse.ArgumentParser(
     description='Monitor Upstream for Changes to Trigger RPM SPEC Changes')
@@ -24,7 +29,7 @@ UPSTREAM_SPEC_BRANCH = config['spec']['branch']
 UPSTREAM_SPEC_REMOTE = config['spec']['remote']
 SPEC_FILE = config['spec']['file']
 SRPM_TMP_REPO = config['default']['tmp_repo']
-MAINTAINER_STR = config['default']['maintainer']
+MAINTAINER_STR = f"{config['git-config']['name']} <{config['git-config']['email']}>"
 
 def strip_version(vers):
     if vers[0] == "v":
@@ -38,10 +43,11 @@ try:
     repo_path = discover_repository(SRPM_TMP_REPO)
 except KeyError:
     pass
-keypair = Keypair('git', '/home/ctimko/.ssh/id_ed25519.pub',
-        '/home/ctimko/.ssh/id_ed25519', '')
-#keypair = Keypair('git', 'id_ed25519.pub',
-#        'id_ed25519', '')
+
+keypair = Keypair(config['git-config']['ssh_user'],
+                    config['git-config']['ssh_pub_key'],
+                    config['git-config']['ssh_priv_key'],
+                    config['git-config']['ssh_key_pass'])
 callbacks = RemoteCallbacks(credentials=keypair)
 if repo_path is None:
     try:
@@ -52,13 +58,14 @@ if repo_path is None:
     except Exception as e:
         print("Unable to clone repository")
         print(e)
+        exit()
 else:
     spec_repo = Repository(repo_path)
     (spec_commit, spec_ref) = spec_repo.resolve_refish(UPSTREAM_SPEC_BRANCH)
-    spec_repo.checkout(spec_ref)
+    spec_repo.checkout(spec_ref, callbacks=callbacks)
     # Fetch latest head
     spec_origin = spec_repo.remotes[UPSTREAM_SPEC_REMOTE]
-    spec_origin.connect()
+    spec_origin.connect(callbacks=callbacks)
     r = spec_origin.fetch()
     print(f'Fetch returned {r.total_deltas} deltas and {r.total_objects} objects')
 
@@ -84,21 +91,30 @@ if spec.version != latest_ver:
                     f'--userstring="{MAINTAINER_STR}"',
                     f'{SRPM_TMP_REPO}/{SPEC_FILE}'])
     print(f'Update bumpspec return code is {rc.returncode}')
-    # Update the working index
+    # Stage everything for the commit
     index = spec_repo.index
     index.add(SPEC_FILE)
     index.write()
-    # Push branch to remote
+
+    # Do the commit
     (commit, ref) = spec_repo.resolve_refish(f'update/v{latest_ver}')
-    r = spec_origin.push([f'update/v{latest_ver}'], callbacks=callbacks)
+    message = f'Update spec from {spec.version} -> {latest_ver}'
+    tree = index.write_tree()
+    author = Signature(email=config['git-config']['email'], name=config['git-config']['name'])
+    commiter = Signature(email=config['git-config']['email'], name=config['git-config']['name'])
+    oid = spec_repo.create_commit(ref.name, author, commiter, message, tree, [commit.hex])
+    
+    # Push branch to remote
+    r = spec_origin.push([ref.name], callbacks=callbacks)
     print(f'Push returned {r}')
-    ## And open a Merge Request
-    github_spec = g.get_repo(GITHUB_SPEC)
+
+    ## And open a Pull Request
+    github_spec = g.get_repo(GITHUB_SPEC_REPO)
     body = f'''
     # Summary
-    Bump SPEC Version to latest release ({latest_rel}) from {GITHUB_UPSTREAM}
+    Bump SPEC Version to latest release (v{latest_ver}) from {GITHUB_UPSTREAM}
     '''
-    github_spec.create_pull(title=f'Bump SPEC Version to {latest_rel}',
+    github_spec.create_pull(title=f'Bump SPEC Version to v{latest_ver}',
             body=body, head=f'update/v{latest_ver}',
             base=UPSTREAM_SPEC_BRANCH)
 else:
