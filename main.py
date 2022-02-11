@@ -64,7 +64,7 @@ if repo_path is None:
 else:
     spec_repo = Repository(repo_path)
     (spec_commit, spec_ref) = spec_repo.resolve_refish(UPSTREAM_SPEC_BRANCH)
-    spec_repo.checkout(spec_ref, callbacks=callbacks)
+    spec_repo.checkout(spec_ref)
     # Fetch latest head
     spec_origin = spec_repo.remotes[UPSTREAM_SPEC_REMOTE]
     spec_origin.connect(callbacks=callbacks)
