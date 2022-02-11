@@ -14,7 +14,7 @@ from pygit2 import (
 
 parser = argparse.ArgumentParser(
     description='Monitor Upstream for Changes to Trigger RPM SPEC Changes')
-parser.add_argument('--dry', default=False, type=bool,
+parser.add_argument('--dry', action='store_true', default=False,
     help='Don\'t actually commit or open the pull request.')
 parser.add_argument('--config', nargs='?', default='soot.cfg', type=str,
     help='Change config file from default soot.cfg.')
