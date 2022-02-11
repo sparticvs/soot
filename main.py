@@ -14,6 +14,8 @@ from pygit2 import (
 
 parser = argparse.ArgumentParser(
     description='Monitor Upstream for Changes to Trigger RPM SPEC Changes')
+parser.add_argument('--dry', default=False, type=bool,
+    help='Don\'t actually commit or open the pull request.')
 parser.add_argument('--config', nargs='?', default='soot.cfg', type=str,
     help='Change config file from default soot.cfg.')
 args = parser.parse_args()
@@ -98,23 +100,31 @@ if spec.version != latest_ver:
 
     # Do the commit
     (commit, ref) = spec_repo.resolve_refish(f'update/v{latest_ver}')
-    message = f'Update spec from {spec.version} -> {latest_ver}'
-    tree = index.write_tree()
-    author = Signature(email=config['git-config']['email'], name=config['git-config']['name'])
-    commiter = Signature(email=config['git-config']['email'], name=config['git-config']['name'])
-    oid = spec_repo.create_commit(ref.name, author, commiter, message, tree, [commit.hex])
-    
-    # Push branch to remote
-    r = spec_origin.push([ref.name], callbacks=callbacks)
-    print(f'Push returned {r}')
+
+    if args.dry:
+        print(f'[DRY] Pushing Branch')
+    else:
+        message = f'Update spec from {spec.version} -> {latest_ver}'
+        tree = index.write_tree()
+        author = Signature(email=config['git-config']['email'], name=config['git-config']['name'])
+        commiter = Signature(email=config['git-config']['email'], name=config['git-config']['name'])
+        oid = spec_repo.create_commit(ref.name, author, commiter, message, tree, [commit.hex])
+        
+        # Push branch to remote
+        r = spec_origin.push([ref.name], callbacks=callbacks)
+        print(f'Push returned {r}')
 
     ## And open a Pull Request
     github_spec = g.get_repo(GITHUB_SPEC_REPO)
+    title = f'Bump SPEC Version to {latest_rel}'
     body = f'''
     # Summary
     Bump SPEC Version to latest release (v{latest_ver}) from {GITHUB_UPSTREAM}
     '''
-    github_spec.create_pull(title=f'Bump SPEC Version to v{latest_ver}',
+    if args.dry:
+        print(f'[DRY] Create Pull Request\n{title}\n=======\n{body}')
+    else:
+        github_spec.create_pull(title=title,
             body=body, head=f'update/v{latest_ver}',
             base=UPSTREAM_SPEC_BRANCH)
 else:
