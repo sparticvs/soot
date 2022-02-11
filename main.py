@@ -46,10 +46,14 @@ try:
 except KeyError:
     pass
 
+key_pass = ""
+if 'ssh_key_pass' in config['git-config']:
+    key_pass = config['git-config']['ssh_key_pass']
+
 keypair = Keypair(config['git-config']['ssh_user'],
                     config['git-config']['ssh_pub_key'],
                     config['git-config']['ssh_priv_key'],
-                    config['git-config']['ssh_key_pass'])
+                    key_pass)
 callbacks = RemoteCallbacks(credentials=keypair)
 if repo_path is None:
     try:
