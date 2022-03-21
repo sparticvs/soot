@@ -120,9 +120,10 @@ if spec.version != latest_ver:
 
     ## And open a Pull Request
     github_spec = g.get_repo(GITHUB_SPEC_REPO)
-    title = f'Bump SPEC Version to {latest_rel}'
+    title = f'Bump SPEC Version to {latest_ver}'
     body = f'''
     # Summary
+
     Bump SPEC Version to latest release (v{latest_ver}) from {GITHUB_UPSTREAM}
     '''
     if args.dry:
